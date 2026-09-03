@@ -10,7 +10,7 @@ def course_details(request, course_id):
     """
     course = get_object_or_404(Course, pk=course_id)
     context = {'course': course}
-    return render(request, 'course_details_bootstrap.html', context)
+    return render(request, 'onlinecourse/course_details_bootstrap.html', context)
 
 
 def submit(request, course_id):
@@ -45,43 +45,42 @@ def submit(request, course_id):
             submission.choices.set(choices)
             submission.save()
             
-        return redirect('show_exam_result', course_id=course.id, submission_id=submission.id)
+        try:
+            return redirect('show_exam_result', course_id=course.id, submission_id=submission.id)
+        except Exception:
+            return redirect('onlinecourse:show_exam_result', course_id=course.id, submission_id=submission.id)
     
     return redirect('course_details', course_id=course.id)
 
 
-def show_exam_result(request, course_id, submission_id=None):
+def show_exam_result(request, course_id, submission_id):
     """
-    View function to display score and detailed results of an exam submission.
+    View function to display exam results.
+    Retrieves course and submission, calculates total_score, total_possible, and selected_choice_ids,
+    and passes them in the context to the exam_result_bootstrap.html template.
     """
+    context = {}
     course = get_object_or_404(Course, pk=course_id)
+    submission = get_object_or_404(Submission, pk=submission_id)
     
-    if submission_id:
-        submission = get_object_or_404(Submission, pk=submission_id)
-    else:
-        submission = Submission.objects.filter().last()
-        if not submission:
-            raise Http404("No submission found.")
-            
-    selected_choice_ids = list(submission.choices.values_list('id', flat=True))
+    # Extract selected choice IDs from submission
+    selected_choice_ids = set(submission.choices.values_list('id', flat=True))
+    
     total_score = 0
     total_possible = 0
     
-    # Calculate score based on correct questions
+    # Calculate score by evaluating user choices for each question
     for lesson in course.lesson_set.all():
         for question in lesson.question_set.all():
             total_possible += question.grade
             if question.is_get_score(selected_choice_ids):
                 total_score += question.grade
 
-    percentage = (total_score / total_possible * 100) if total_possible > 0 else 0
+    # Pass all required context variables to exam_result_bootstrap.html
+    context['course'] = course
+    context['submission'] = submission
+    context['selected_choice_ids'] = selected_choice_ids
+    context['total_score'] = total_score
+    context['total_possible'] = total_possible
 
-    context = {
-        'course': course,
-        'submission': submission,
-        'total_score': total_score,
-        'total_possible': total_possible,
-        'percentage': round(percentage, 2),
-        'selected_choice_ids': selected_choice_ids,
-    }
-    return render(request, 'exam_result.html', context)
+    return render(request, 'onlinecourse/exam_result_bootstrap.html', context)
